@@ -29,4 +29,5 @@ urlpatterns = [
     # রিভিউ এবং ইনভয়েস
     path('add-review/<int:product_id>/', views.add_review, name='add_review'),
     path('download-invoice/<int:order_id>/', views.download_invoice, name='download_invoice'),
+    path('order/delete/<int:order_id>/', views.delete_order, name='delete_order'),
 ]

@@ -51,6 +51,7 @@ def add_to_cart(request, product_id):
         cart[pid_str] = quantity
         
     request.session['cart'] = cart
+    request.session.modified = True
     return redirect('cart')
 
 def cart_view(request):
@@ -87,6 +88,7 @@ def update_cart(request, product_id):
 def clear_cart(request):
     if 'cart' in request.session: 
         del request.session['cart']
+        request.session.modified = True
     return redirect('cart')
 
 # --- Checkout & SSLCommerz Payment ---
@@ -131,45 +133,51 @@ def init_payment(request):
 
 @csrf_exempt
 def payment_success(request):
+    # ইউজার লগইন না থাকলে এটি ট্র্যাকিং এর জন্য প্রিন্ট করবে
+    if not request.user.is_authenticated:
+        print("Warning: User logged out during payment redirect!")
+
     cart = request.session.get('cart', {})
     order = None
+    
+    if cart and request.user.is_authenticated:
+        # অর্ডার তৈরি
+        order = Order.objects.create(
+            user=request.user,
+            full_name=request.user.get_full_name() or request.user.username,
+            email=request.user.email,
+            address="Default Address",
+            city="Dhaka",
+            total_paid=0,
+            paid=True
+        )
+        
+        total_amount = 0
+        for pid, qty in cart.items():
+            try:
+                product = Product.objects.get(id=pid)
+                subtotal = product.price * qty
+                total_amount += subtotal
+                
+                OrderItem.objects.create(
+                    order=order,
+                    product=product,
+                    quantity=qty,
+                    price=product.price
+                )
+            except Product.DoesNotExist:
+                continue
 
-    if cart:
-        if request.user.is_authenticated:
-            # ১. নতুন অর্ডার তৈরি করা
-            order = Order.objects.create(
-                user=request.user, 
-                total_price=0, 
-                is_paid=True
-            )
-            
-            total_amount = 0
-            for pid, qty in cart.items():
-                try:
-                    product = Product.objects.get(id=pid)
-                    subtotal = product.price * qty
-                    total_amount += subtotal
-                    
-                    # ২. প্রতিটি প্রোডাক্টকে OrderItem হিসেবে সেভ করা
-                    OrderItem.objects.create(
-                        order=order,
-                        product=product,
-                        quantity=qty,
-                        price=product.price
-                    )
-                except Product.DoesNotExist:
-                    continue
+        # ফাইনাল অ্যামাউন্ট সেভ
+        order.total_paid = total_amount
+        order.save()
 
-            # ৩. টোটাল প্রাইজ সেভ করা
-            order.total_price = total_amount
-            order.save()
-
-            # ৪. কার্ট পুরোপুরি খালি করা (সেশন আপডেট সহ)
-            request.session['cart'] = {}
-            request.session.modified = True
-            if 'cart' in request.session:
-                del request.session['cart']
-                request.session.modified = True
+        # কার্ট এবং সেশন ক্লিয়ার করা (এটি আপনার কার্ট কাউন্ট ০ করবে)
+        request.session['cart'] = {}
+        request.session.modified = True
+        if 'cart' in request.session:
+            del request.session['cart']
+        request.session.modified = True
             
     return render(request, 'shop/payment_success.html', {'order_id': order.id if order else None})
 
@@ -197,12 +205,13 @@ def login_view(request):
     return render(request, 'shop/login.html', {'form': form})
 
 def logout_view(request):
-    logout(request); return redirect('home')
+    logout(request)
+    return redirect('home')
 
 @login_required
 def dashboard(request):
-    # সব অর্ডার ফিল্টার করে লেটেস্ট গুলো আগে দেখানো
-    orders = Order.objects.filter(user=request.user).order_by('-id')
+    # অর্ডারগুলো ড্যাশবোর্ডে পাঠানোর জন্য
+    orders = Order.objects.filter(user=request.user).order_by('-created')
     return render(request, 'shop/dashboard.html', {'orders': orders})
 
 # --- PDF Invoice ---
@@ -234,3 +243,9 @@ def add_review(request, product_id):
             comment=request.POST.get('comment')
         )
     return redirect('product_detail', id=product_id)
+@login_required
+def delete_order(request, order_id):
+    order = get_object_or_404(Order, id=order_id, user=request.user)
+    if request.method == 'POST':
+        order.delete()
+    return redirect('dashboard')

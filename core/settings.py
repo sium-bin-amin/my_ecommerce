@@ -130,3 +130,7 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 # এই অংশটুকু যোগ করুন
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# settings.py এর নিচে যোগ করুন
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_SAVE_EVERY_REQUEST = True
+CSRF_COOKIE_SAMESITE = 'Lax'
