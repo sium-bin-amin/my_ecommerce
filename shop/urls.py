@@ -21,4 +21,6 @@ urlpatterns = [
     path('payment-fail/', views.payment_fail, name='payment_fail'),
     path('payment-cancel/', views.payment_cancel, name='payment_cancel'),
     path('update-cart/<int:product_id>/', views.update_cart, name='update_cart'),
+    path('dashboard/', views.user_dashboard, name='user_dashboard'),
+    path('download-invoice/<int:order_id>/', views.download_invoice, name='download_invoice'),
 ]

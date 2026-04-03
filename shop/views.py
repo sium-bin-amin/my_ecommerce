@@ -113,20 +113,29 @@ def init_payment(request):
 def payment_success(request):
     order = None
     cart = request.session.get('cart', {})
+    
     if cart:
+        # ১. আগে অর্ডার অবজেক্ট তৈরি করা
         order = Order.objects.create(user=request.user, total_price=0, is_paid=True)
         total_amount = 0
+        
+        # ২. কার্টের আইটেমগুলো লুপ চালিয়ে অর্ডারে যোগ করা
         for pid, qty in cart.items():
             product = get_object_or_404(Product, id=pid)
             subtotal = product.price * qty
             total_amount += subtotal
+            # অর্ডার আইটেম তৈরি
             OrderItem.objects.create(order=order, product=product, quantity=qty, price=product.price)
+        
+        # ৩. অর্ডারের টোটাল প্রাইস আপডেট করে সেভ করা (এটাই ড্যাশবোর্ডে দেখাবে)
         order.total_price = total_amount
         order.save()
-        del request.session['cart']
-        request.session.modified = True
+        
+        # ৪. কার্ট পুরোপুরি খালি করা এবং সেশন সেভ করা
+        request.session['cart'] = {}
+        request.session.modified = True 
+        
     return render(request, 'shop/payment_success.html', {'order_id': order.id if order else None})
-
 @csrf_exempt
 def payment_fail(request):
     return render(request, 'shop/payment_failed.html')
@@ -182,3 +191,35 @@ def update_cart(request, product_id):
         request.session['cart'] = cart
         request.session.modified = True
     return redirect('cart')
+from django.contrib.auth.decorators import login_required
+from .models import Order # আপনার অর্ডারের মডেলের নাম নিশ্চিত করুন
+
+@login_required
+def user_dashboard(request):
+    # আপনার মডেলে 'created_at' ফিল্ডটি না থাকলে শুধু '-id' ব্যবহার করুন
+    try:
+        orders = Order.objects.filter(user=request.user).order_by('-id')
+    except:
+        orders = Order.objects.filter(user=request.user)
+        
+    return render(request, 'shop/dashboard.html', {'orders': orders})
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+
+def download_invoice(request, order_id):
+    order = get_object_or_404(Order, id=order_id, user=request.user)
+    template_path = 'shop/invoice_pdf.html'
+    context = {'order': order}
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="invoice_{order.id}.pdf"'
+    
+    template = get_template(template_path)
+    html = template.render(context)
+
+    # PDF তৈরি করা
+    pisa_status = pisa.CreatePDF(html, dest=response)
+    if pisa_status.err:
+       return HttpResponse('We had some errors <pre>' + html + '</pre>')
+    return response
