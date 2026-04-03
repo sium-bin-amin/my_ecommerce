@@ -1,0 +1,17 @@
+{% extends 'shop/base.html' %}
+
+{% block content %}
+<div style="text-align: center; padding: 50px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 600px; margin: 50px auto;">
+    <h1 style="color: #28a745; font-size: 40px;">Order Successful! 🎉</h1>
+    <hr>
+    <p style="font-size: 18px;">Thank you for your purchase, <strong>{{ order.full_name }}</strong>.</p>
+    <p>Your Order ID is: <span style="background: #eee; padding: 5px 10px; border-radius: 4px; font-weight: bold;">#{{ order.id }}</span></p>
+    <p>Total Amount Paid: <strong>${{ order.total_paid }}</strong></p>
+    <p style="color: #666;">We will contact you soon for delivery at <strong>{{ order.address }}, {{ order.city }}</strong>.</p>
+    
+    <div style="margin-top: 30px;">
+        <a href="{% url 'home' %}" class="btn" style="background: #febd69; border: none; padding: 10px 20px;">Continue Shopping</a>
+        <a href="{% url 'dashboard' %}" class="btn" style="background: #232f3e; color: white; border: none; padding: 10px 20px;">View My Orders</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends 'shop/base.html' %}
+
+{% block content %}
+<div style="text-align: center; padding: 50px; background: white; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+    <h1 style="color: #28a745;">Payment Successful! 🎉</h1>
+    <p>Thank you for your purchase. Your payment has been processed successfully.</p>
+    <p>Transaction ID: <strong>{{ data.tran_id }}</strong></p>
+    <p>Amount: <strong>{{ data.currency }} {{ data.amount }}</strong></p>
+    <a href="/" class="btn" style="background: #232f3e; color: white;">Continue Shopping</a>
+</div>
+{% endblock %}

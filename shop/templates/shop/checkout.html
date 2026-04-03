@@ -1,0 +1,22 @@
+{% extends 'shop/base.html' %}
+{% block content %}
+<div style="max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 8px;">
+    <h2>Shipping Information</h2>
+    <form action="{% url 'init_payment' %}" method="POST">
+        {% csrf_token %}
+        <input type="text" name="full_name" placeholder="Full Name" required style="width: 100%; padding: 10px; margin-bottom: 10px;">
+        <input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin-bottom: 10px;">
+        <textarea name="address" placeholder="Full Address" required style="width: 100%; padding: 10px; margin-bottom: 10px;"></textarea>
+        <input type="text" name="city" placeholder="City" required style="width: 100%; padding: 10px; margin-bottom: 10px;">
+        
+        <div style="background: #f7f7f7; padding: 15px; border-radius: 5px; margin-top: 20px;">
+            <h3>Total Amount: ${{ total_price }}</h3>
+            <p style="font-size: 14px; color: #555;">You will be redirected to SSLCommerz secure payment gateway.</p>
+        </div>
+        
+        <button type="submit" class="btn" style="width: 100%; background: #ffa41c; margin-top: 20px; font-weight: bold;">
+            Pay Now & Confirm Order
+        </button>
+    </form>
+</div>
+{% endblock %}
