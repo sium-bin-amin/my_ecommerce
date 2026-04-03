@@ -5,6 +5,9 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
 from .models import Product, Category, Order, OrderItem, Review 
 from .forms import UserRegisterForm
 
@@ -65,8 +68,25 @@ def cart_view(request):
             request.session['cart'] = cart
     return render(request, 'shop/cart.html', {'cart_items': cart_items, 'total_price': total_price})
 
+def update_cart(request, product_id):
+    if request.method == 'POST':
+        cart = request.session.get('cart', {})
+        try:
+            quantity = int(request.POST.get('quantity', 1))
+            if quantity > 0:
+                cart[str(product_id)] = quantity
+            else:
+                cart.pop(str(product_id), None)
+        except (ValueError, TypeError):
+            pass
+            
+        request.session['cart'] = cart
+        request.session.modified = True
+    return redirect('cart')
+
 def clear_cart(request):
-    if 'cart' in request.session: del request.session['cart']
+    if 'cart' in request.session: 
+        del request.session['cart']
     return redirect('cart')
 
 # --- Checkout & SSLCommerz Payment ---
@@ -111,31 +131,48 @@ def init_payment(request):
 
 @csrf_exempt
 def payment_success(request):
-    order = None
     cart = request.session.get('cart', {})
-    
+    order = None
+
     if cart:
-        # ১. আগে অর্ডার অবজেক্ট তৈরি করা
-        order = Order.objects.create(user=request.user, total_price=0, is_paid=True)
-        total_amount = 0
-        
-        # ২. কার্টের আইটেমগুলো লুপ চালিয়ে অর্ডারে যোগ করা
-        for pid, qty in cart.items():
-            product = get_object_or_404(Product, id=pid)
-            subtotal = product.price * qty
-            total_amount += subtotal
-            # অর্ডার আইটেম তৈরি
-            OrderItem.objects.create(order=order, product=product, quantity=qty, price=product.price)
-        
-        # ৩. অর্ডারের টোটাল প্রাইস আপডেট করে সেভ করা (এটাই ড্যাশবোর্ডে দেখাবে)
-        order.total_price = total_amount
-        order.save()
-        
-        # ৪. কার্ট পুরোপুরি খালি করা এবং সেশন সেভ করা
-        request.session['cart'] = {}
-        request.session.modified = True 
-        
+        if request.user.is_authenticated:
+            # ১. নতুন অর্ডার তৈরি করা
+            order = Order.objects.create(
+                user=request.user, 
+                total_price=0, 
+                is_paid=True
+            )
+            
+            total_amount = 0
+            for pid, qty in cart.items():
+                try:
+                    product = Product.objects.get(id=pid)
+                    subtotal = product.price * qty
+                    total_amount += subtotal
+                    
+                    # ২. প্রতিটি প্রোডাক্টকে OrderItem হিসেবে সেভ করা
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        quantity=qty,
+                        price=product.price
+                    )
+                except Product.DoesNotExist:
+                    continue
+
+            # ৩. টোটাল প্রাইজ সেভ করা
+            order.total_price = total_amount
+            order.save()
+
+            # ৪. কার্ট পুরোপুরি খালি করা (সেশন আপডেট সহ)
+            request.session['cart'] = {}
+            request.session.modified = True
+            if 'cart' in request.session:
+                del request.session['cart']
+                request.session.modified = True
+            
     return render(request, 'shop/payment_success.html', {'order_id': order.id if order else None})
+
 @csrf_exempt
 def payment_fail(request):
     return render(request, 'shop/payment_failed.html')
@@ -164,8 +201,27 @@ def logout_view(request):
 
 @login_required
 def dashboard(request):
+    # সব অর্ডার ফিল্টার করে লেটেস্ট গুলো আগে দেখানো
     orders = Order.objects.filter(user=request.user).order_by('-id')
     return render(request, 'shop/dashboard.html', {'orders': orders})
+
+# --- PDF Invoice ---
+@login_required
+def download_invoice(request, order_id):
+    order = get_object_or_404(Order, id=order_id, user=request.user)
+    template_path = 'shop/invoice_pdf.html'
+    context = {'order': order}
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="invoice_{order.id}.pdf"'
+    
+    template = get_template(template_path)
+    html = template.render(context)
+
+    pisa_status = pisa.CreatePDF(html, dest=response)
+    if pisa_status.err:
+       return HttpResponse('We had some errors <pre>' + html + '</pre>')
+    return response
 
 # --- Review ---
 @login_required
@@ -178,48 +234,3 @@ def add_review(request, product_id):
             comment=request.POST.get('comment')
         )
     return redirect('product_detail', id=product_id)
-def update_cart(request, product_id):
-    if request.method == 'POST':
-        cart = request.session.get('cart', {})
-        quantity = int(request.POST.get('quantity', 1))
-        
-        if quantity > 0:
-            cart[str(product_id)] = quantity
-        else:
-            del cart[str(product_id)] # ০ হলে রিমুভ করে দিবে
-            
-        request.session['cart'] = cart
-        request.session.modified = True
-    return redirect('cart')
-from django.contrib.auth.decorators import login_required
-from .models import Order # আপনার অর্ডারের মডেলের নাম নিশ্চিত করুন
-
-@login_required
-def user_dashboard(request):
-    # আপনার মডেলে 'created_at' ফিল্ডটি না থাকলে শুধু '-id' ব্যবহার করুন
-    try:
-        orders = Order.objects.filter(user=request.user).order_by('-id')
-    except:
-        orders = Order.objects.filter(user=request.user)
-        
-    return render(request, 'shop/dashboard.html', {'orders': orders})
-from django.http import HttpResponse
-from django.template.loader import get_template
-from xhtml2pdf import pisa
-
-def download_invoice(request, order_id):
-    order = get_object_or_404(Order, id=order_id, user=request.user)
-    template_path = 'shop/invoice_pdf.html'
-    context = {'order': order}
-    
-    response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="invoice_{order.id}.pdf"'
-    
-    template = get_template(template_path)
-    html = template.render(context)
-
-    # PDF তৈরি করা
-    pisa_status = pisa.CreatePDF(html, dest=response)
-    if pisa_status.err:
-       return HttpResponse('We had some errors <pre>' + html + '</pre>')
-    return response
